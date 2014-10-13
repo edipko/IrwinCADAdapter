@@ -1,12 +1,14 @@
 package com.spotonresponse.irwin;
 
 import java.io.ByteArrayInputStream;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Properties;
 
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBException;
@@ -19,6 +21,7 @@ import javax.xml.stream.XMLStreamReader;
 import javax.xml.stream.util.StreamReaderDelegate;
 
 import org.apache.commons.io.IOUtils;
+import org.apache.log4j.Logger;
 import org.w3c.dom.Document;
 import org.xml.sax.InputSource;
 
@@ -34,54 +37,35 @@ import com.spotonresponse.xchangecore.XmlTools;
 
 public class IrwinCADAdapter {
 	/* FTP Site Data */
-	static String url = "gis.sc.gov";
+/*	static String url = "gis.sc.gov";
 	static String file = "/scgisdata/forestry/public_wild_out.xml";
 	static int port = 21;
 	static String user = "anonymous";
 	static String pass = "ernie.dipko@gmail.com";
-
+	*/
 	/* XChange Core data */
-	static String uicdsURL = "https://test3.xchangecore.leidos.com";
-	static String uicdsUser = "spoton";
-	static String uicdsPass = "spoton2013";
+	static String remote_file = "";
+	static String xcoreURL = "";
+	static String xcoreUser = "";
+	static String xcorePass = "";
+
+	
 	static int UICDStimeout = 60;
-
+	static Properties props = new Properties();
 	static List<WorkProduct> wplist = new ArrayList<WorkProduct>();
-
-	private static ChannelObject getFtpData() {
-		/*
-		 * String xml =
-		 * "<rss version=\"2.0\" xmlns:geo=\"http://www.w3.org/2003/01/geo/wgs84_pos#\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\">"
-		 * + "<channel>" + "<item><Status>CMPL</Status>" +
-		 * "<Location>2 PASLEY ST</Location>" +
-		 * "<Landmark>S OF HEMINGWAY OFF HWY 41/51</Landmark>" +
-		 * "<geo:lat>33.741585</geo:lat>" + "<geo:long>-79.448227</geo:long>" +
-		 * "<County>WILLMSBRG</County>" +
-		 * "<InitialReport>10/01/14 13:02:19</InitialReport>" +
-		 * "<ForestedAcres/>" + "<NonForestedAcres/>" + "<Total/>" +
-		 * "<Cause/></Item>"
-		 * 
-		 * + "<Item><Status>CMPL</Status>" + "<Location>3 PASLEY ST</Location>"
-		 * + "<Landmark>Somewhere else</Landmark>" +
-		 * "<geo:lat>37.741585</geo:lat>" + "<geo:long>-80.32754</geo:long>" +
-		 * "<County>SomeWhere</County>" +
-		 * "<InitialReport>10/02/14 01:02:19</InitialReport>" +
-		 * "<ForestedAcres/>" + "<NonForestedAcres/>" + "<Total/>" +
-		 * "<Cause/></item>"
-		 * 
-		 * + "</channel></rss>";
-		 */
-		
-		//String xml = FTPUtils.ftpFetchFile(url, port, file, user, pass);
-		String ftpurl = "ftp://" + url + file;
-		String xml = FTPUtils.ftpFetchFile(ftpurl);
-		//System.out.println("Got FTP data: " + xml);
+	static Logger logger = Logger.getLogger(IrwinCADAdapter.class);
+	
+	private static ChannelObject getFtpData(String file) {
+		//String ftpurl = "ftp://" + url + file;
+		String xml = FTPUtils.ftpFetchFile(file);
+		//System.out.println(xml);
 		String xml2 = xml
 				.replace("geo:lat", "Latitude")
 				.replace("geo:long", "Longitude")
 				.replace(
 						"<rss version=\"2.0\" xmlns:geo=\"http://www.w3.org/2003/01/geo/wgs84_pos#\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\">",
 						"")
+				.replace("rss xmlns:geo=\"http://www.w3.org/2003/01/geo/wgs84_pos#\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\" version=\"2.0\"", "")
 				.replace("</rss>", "")
 				.replace("<?xml version=\"1.0\"?>", "");
 
@@ -92,7 +76,7 @@ public class IrwinCADAdapter {
 			XMLInputFactory xif = XMLInputFactory.newInstance();
 			XMLStreamReader xsr = xif.createXMLStreamReader(new ByteArrayInputStream(
 					xml2.getBytes(StandardCharsets.UTF_8)));
-			
+	//System.out.println(xml2);		
 			Unmarshaller jaxbUnmarshaller = jaxbContext.createUnmarshaller();
 			channels = (ChannelObject) jaxbUnmarshaller.unmarshal(new ToLowerCaseDelegate(xsr));
 		} catch (JAXBException | XMLStreamException e) {
@@ -104,7 +88,7 @@ public class IrwinCADAdapter {
 	}
 
 	private static String populateXchangeCore(CADItem item) {
-		String siteaddress = uicdsURL
+		String siteaddress = xcoreURL
 				+ "/uicds/core/ws/services/WorkProductService";
 		String createIncidentXml = null;
 		String status = "";
@@ -165,7 +149,7 @@ public class IrwinCADAdapter {
 				Document doc = builder.parse(new InputSource(new StringReader(
 						_createIncidentXml)));
 				UICDStools ut = new UICDStools();
-				status = ut.sendRequest(doc, siteaddress, uicdsUser, uicdsPass,
+				status = ut.sendRequest(doc, siteaddress, xcoreUser, xcorePass,
 						UICDStimeout);
 			} catch (Exception e) {
 				e.printStackTrace();
@@ -208,19 +192,47 @@ public class IrwinCADAdapter {
 
 	
 	
+	private static Properties getProperties() {
+		Properties prop = new Properties();
+		
+		String propertiesFile = System.getProperty("propfile");
+	    try {
+	      propertiesFile.length();
+	    } catch (Exception ex) {
+	      logger.fatal("No properties file specified: " + ex);
+	      System.exit(1);
+	    }
+   
+	    try
+	    {
+	      prop.load(new FileInputStream(propertiesFile));
+	    } catch (IOException ex) {
+	      ex.printStackTrace();
+	      System.exit(2);
+	    }
+
+	    return prop;
+	}
 	
 	public static void main(String[] args) {
+		// Get the runtime properties
+				props = getProperties();
+				xcoreURL = props.getProperty("xcoreURL");
+				xcoreUser = props.getProperty("xcoreUser");
+				xcorePass = props.getProperty("xcorePass");
+				remote_file = props.getProperty("remote_file");
+		
 		// Get the FTP Data
-		ChannelObject channels = getFtpData();
+		ChannelObject channels = getFtpData(remote_file);
 
 		// Get the XChangeCore data
-		UserAuthenticationObject ua = new UserAuthenticationObject(uicdsUser,
-				uicdsPass);
+		UserAuthenticationObject ua = new UserAuthenticationObject(xcoreUser,
+				xcorePass);
 
 		// If there are incidents in the RSS feed - proceed.
 		if (channels.getItems() != null) {
 			// Get the XChangeCore Data
-			getXchangeCoreData(uicdsURL
+			getXchangeCoreData(xcoreURL
 					+ "/uicds/core/ws/services/IncidentManagementService", ua);
 
 			// Loop through the FTP Data
@@ -267,7 +279,7 @@ public class IrwinCADAdapter {
 	            super(xsr);
 	        }
 	 
-	        @Override
+	  /*      @Override
 	        public String getAttributeLocalName(int index) {
 	            return super.getAttributeLocalName(index).toLowerCase();
 	        }
@@ -276,7 +288,7 @@ public class IrwinCADAdapter {
 	        public String getLocalName() {
 	            return super.getLocalName().toLowerCase();
 	        }
-	 
+	 */
 	    }
 	 
 

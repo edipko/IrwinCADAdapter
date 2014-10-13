@@ -21,6 +21,7 @@ import org.apache.commons.net.ftp.FTPClient;
 public class FTPUtils {
  
 	public static String ftpFetchFile(String _url) {
+		System.out.println("Got URL: " + _url);
 		URL url;
 		String line = "";
 		String lines = "";
